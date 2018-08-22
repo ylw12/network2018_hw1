@@ -4,9 +4,13 @@
 #################################################################
 
 rm(list = ls())
+library('cvTools')
 library('igraph')
+library('network')
+library('PRROC')
 library('sna')
 library('statnet')
+library('viridis')
 
 setwd('~/Dropbox/Summer_Courses/workshopWashU/network2018_hw1')
 
@@ -86,7 +90,75 @@ countries[37] # Boko Haram
 # once the two government institutions are detected.
 # We'll cross validate the above 4 models.
 
+g1 <- network(conflictlist[[1]], directed = T)
 
+degree <- sna::degree(g1, cmode = 'outdegree')
+degree <- ifelse(degree != 0, 1, 0)
+
+ClustNum <- as.data.frame(cbind(NodeCls2, NodeCls3, NodeCls4, NodeCls5, degree))
+
+# Set-up cross validation
+folds <- cvFolds(nrow(ClustNum), K = 10)
+ClustNum$Pred2 <- rep(0, nrow(ClustNum))
+ClustNum$Pred3 <- rep(0, nrow(ClustNum))
+ClustNum$Pred4 <- rep(0, nrow(ClustNum))
+ClustNum$Pred5 <- rep(0, nrow(ClustNum))
+
+set.seed(1)
+for (i in 1:10){
+  train <- ClustNum[folds$subsets[folds$which != i], ]
+  validation <- ClustNum[folds$subsets[folds$which == i], ]
+  
+  glm2 <- glm(degree ~ NodeCls2, data = train, family = binomial(link = 'logit'))
+  pred2 <- predict(glm2, newdata = validation, type = 'response')
+  ClustNum[folds$subsets[folds$which == i], ]$Pred2 <- pred2
+  
+  glm3 <- glm(degree ~ NodeCls3, data = train, family = binomial(link = 'logit'))
+  pred3 <- predict(glm3, newdata = validation, type = 'response')
+  ClustNum[folds$subsets[folds$which == i], ]$Pred3 <- pred3
+  
+  glm4 <- glm(degree ~ NodeCls4, data = train, family = binomial(link = 'logit'))
+  pred4 <- predict(glm4, newdata = validation, type = 'response')
+  ClustNum[folds$subsets[folds$which == i], ]$Pred4 <- pred4
+  
+  glm5 <- glm(degree ~ NodeCls5, data = train, family = binomial(link = 'logit'))
+  pred5 <- predict(glm5, newdata = validation, type = 'response')
+  ClustNum[folds$subsets[folds$which == i], ]$Pred5 <- pred5
+}
+
+for (i in 6:9){
+  FG <- ClustNum[ClustNum$degree == 1, i]
+  BG <- ClustNum[ClustNum$degree == 0, i]
+  ROC[[i-5]] <- roc.curve(FG, BG, curve = T)
+  PR[[i-5]] <- pr.curve(FG, BG, curve = T)
+}
+c(ROC[[1]]$auc, ROC[[2]]$auc, ROC[[3]]$auc, ROC[[4]]$auc)
+c(PR[[1]]$auc.integral, PR[[2]]$auc.integral, PR[[3]]$auc.integral, PR[[4]]$auc.integral)
+
+
+# Based on the results, choose k = 2 to visualize.
+tiesSum = apply(graph[], 1, sum)
+# condition size based on # of ties
+V(graph)$size <- sqrt(tiesSum + 1)
+
+# color
+colnames(graph[])
+
+bcols <- c(rep("blue", 16), "yellow", rep("blue", 3), "yellow", rep("blue", 16))
+
+# plot!
+par(mar=c(0,0,0,0))
+plot(graph,
+     vertex.label=V(graph)$name, 
+     vertex.size=5*V(graph)$size,
+     vertex.color = bcols, # change color of nodes
+     vertex.label.color = "black", # change color of labels
+     vertex.label.cex = .75, # change size of labels to 75% of original size
+     edge.arrow.size = .25,
+     edge.curved=.25, # add a 25% curve to the edges
+     edge.color="grey60", # change edge color to grey
+     layout=layout_on_grid
+)
 
 
 # -------- 3. ERGMs
